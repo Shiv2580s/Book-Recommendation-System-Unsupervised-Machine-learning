@@ -273,3 +273,156 @@ filtered_book_ratings_count[filtered_book_ratings_count['number_of_ratings_given
 Books_with_greaterthan_50ratings = filtered_book_ratings_count[filtered_book_ratings_count['number_of_ratings_given_to_book']>15]
 Books_with_greaterthan_50ratings.head()
 
+
+# 3. Famous books (final table)
+famous_books = filtered_user_rated_greaterthan_50books[filtered_user_rated_greaterthan_50books['Book-Title'].isin(Books_with_greaterthan_50ratings['Book-Title'])]
+famous_books.shape
+
+famous_books.duplicated().sum()
+
+famous_books_pt = famous_books.pivot_table(index='Book-Title', columns='User-ID',values='Book-Rating' )
+famous_books_pt.head(5)
+
+'''majority of cells are null because the user has not rated book,
+where ever a user rated book it is filled with a value
+replacing null values with 0'''
+famous_books_pt.fillna(0,inplace=True)
+famous_books_pt.shape
+
+# ML Model - 1 Cosine similarity
+similarity_scores = cosine_similarity(famous_books_pt)
+similarity_scores.shape
+# creating a collaborative recommendation system
+
+cosin_similarity_scores = cosine_similarity(famous_books_pt)
+
+def recommendation_cosine(book_name):
+  # fetch book index
+  index = np.where(famous_books_pt.index==book_name)[0][0]
+  # finds similarity scores
+  similar_books = sorted(list(enumerate(cosin_similarity_scores[index])),key=lambda x:x[1], reverse = True)[1:6]
+
+  for i in similar_books:
+    print(famous_books_pt.index[i[0]])
+
+recommendation_cosine('Message in a Bottle')
+recommendation_cosine('The Rescue')
+recommendation_cosine('Harry Potter and the Chamber of Secrets (Book 2)')
+
+# ML Model - 2 Pearson correlation co-efiicient
+# Calculate Pearson correlation scores
+pearson_correlation_scores = np.corrcoef(famous_books_pt.fillna(0))
+
+# Function to recommend books based on Pearson correlation
+def recommendation_pearson(book_name):
+    # Check if the book exists in the dataset
+    if book_name not in famous_books_pt.index:
+        print("Book not found/please check the spelling.")
+        return
+
+    # Fetch book index
+    index = np.where(famous_books_pt.index == book_name)[0][0]
+
+    # Calculate Pearson correlation scores for the given book
+    book_correlation = pearson_correlation_scores[index]
+
+    # Sort similar books based on Pearson correlation scores
+    similar_books = sorted(list(enumerate(book_correlation)), key=lambda x: x[1], reverse=True)[1:6]
+
+    # Print recommended books
+    for i, (similar_book_index, correlation_score) in enumerate(similar_books):
+        print(f"Recommendation {i+1}: {famous_books_pt.index[similar_book_index]} (Correlation Score: {correlation_score})")
+
+recommendation_pearson('Message in a Bottle')
+recommendation_pearson('The Rescue')
+recommendation_pearson('Harry Potter and the Chamber of Secrets (Book 2)')
+
+
+# ML Model - 3 Nearest Neighbors Algorithm (Cosine Similarity)
+
+# Fit nearest neighbors model
+nn_model_cosine = NearestNeighbors(metric='cosine')
+nn_model_cosine.fit(famous_books_pt)
+
+def recommendation_nearest_neighbor_cosine(book_name):
+    try:
+        # Fetch book index
+        index = famous_books_pt.index.get_loc(book_name)
+
+        # Find nearest neighbors based on cosine similarity
+        distances, indices = nn_model_cosine.kneighbors([famous_books_pt.iloc[index]], n_neighbors=6)
+
+        for idx in indices[0][1:]:
+            print(famous_books_pt.index[idx])
+    except KeyError:
+        print("Book not found/Please check the spelling.")
+
+recommendation_nearest_neighbor_cosine('Message in a Bottle')
+recommendation_nearest_neighbor_cosine('The Rescue')
+recommendation_nearest_neighbor_cosine('Harry Potter and the Chamber of Secrets (Book 2)')
+
+# Popularity Based recommendation system
+# grouping by book title counting number of ratings given for each book
+ratings_count = books_with_ratings.groupby('Book-Title').count()['Book-Rating'].reset_index()
+ratings_count.rename(columns = {'Book-Rating':'count_of_ratings_given'},inplace = True)
+ratings_count.sort_values('count_of_ratings_given', ascending = False).head(5)
+
+# Initialize lists to store counts for each range
+counts = [0] * 8
+# Defining the ranges
+ranges = [(1, 5), (6, 10), (11, 15), (16, 20), (21, 30), (31, 40), (41, 50), (200, float('inf'))]
+
+# Loop through books received number of ratings
+for i in ratings_count['count_of_ratings_given']:
+    for idx, (start, end) in enumerate(ranges):
+        if start <= i <= end:
+            counts[idx] += 1
+            break
+
+# Create a DataFrame to store the results
+data = {'Range_of_ratings_count': [f'{start}-{end}' if end != float('inf') else f'{start}+' for start, end in ranges],
+        'count_of_ratings': counts}
+ratings_count_df = pd.DataFrame(data)
+ratings_count_df
+
+
+# grouping by book title calculating avg. rating given for each book
+try:
+  avg_rating = books_with_ratings.groupby('Book-Title')['Book-Rating'].mean().reset_index()
+  avg_rating.rename(columns={'Book-Rating': 'avg_ratings'}, inplace=True)
+except Exception as e:
+  avg_rating.head()
+
+# creating popularity_df dataframe with title, count of ratings and avg rating
+popularity_df = pd.merge(ratings_count,avg_rating, on = 'Book-Title' )
+popularity_df.head()
+
+# creating popular_df with top 50 movies filtering by rating count greater than 250 and avg rating descending
+popular_books = popularity_df[popularity_df['count_of_ratings_given']>= 200].sort_values('avg_ratings', ascending = False)[:50]
+popular_books.shape
+
+popular_books.describe()
+
+# 7. Future Scope (In developing book recommendation system)
+Predictive Analytics for Book Releases: By leveraging the expanded dataset comprising book genre information, author ratings, and publisher details, the recommendation system can evolve into a predictive analytics tool. This tool could forecast the potential ratings a book might receive upon release. Utilizing machine learning algorithms trained on historical data, the system can predict the anticipated success of upcoming book releases(predicting book rating). This predictive capability empowers publishers and book retailers to make informed decisions regarding inventory stocking, marketing strategies, and sales projections.
+
+Enhanced Personalization and Recommendation Accuracy: Incorporating author and publisher ratings data allows for a deeper understanding of user preferences and tendencies. By analyzing users past interactions with books authored by specific authors or published by certain publishing houses, the recommendation system can offer more personalized and relevant book suggestions. This heightened level of personalization enhances user satisfaction and engagement with the platform, leading to increased user retention and loyalty.
+
+Dynamic Inventory Management: With predictive analytics capabilities, book retailers can optimize their inventory management processes. By anticipating the potential popularity and demand for upcoming book releases, retailers can strategically allocate resources and stock inventory accordingly. This proactive approach minimizes stockouts, reduces excess inventory holding costs, and maximizes sales opportunities. Additionally, retailers can identify niche or trending genres and authors to diversify their product offerings and cater to evolving consumer preferences.
+
+Collaborative Partnerships and Marketing Opportunities: The predictive insights generated by the recommendation system can foster collaborative partnerships between publishers, authors, and retailers. Publishers and authors can leverage the predictive ratings forecasts to refine their marketing strategies, target specific reader demographics, and optimize promotional campaigns. Retailers can collaborate with authors and publishers to launch exclusive pre-order offers, host author events, and create curated book collections aligned with predicted consumer interests.
+
+# Conclusion
+Collaborative-based filtering approach: recommendation system utilizing cosine similarity and Pearson correlation has been implemented effectively for book recommendation.
+
+Initially, the dataset consists of book with no ratings fill as 0 instead null later dataset was refined by filtering out books with ratings only, ensuring data integrity. Then, by focusing on users who have rated at least 50 books, to enhance richness of the dataset, leading to improved recommendation quality.
+
+Further refinement was achieved by selecting books with a minimum of 15 number of ratings given for each book, resulting in a subset termed "famous books". This step ensured that only books with a significant level of user engagement were considered for recommendation.
+
+A pivot table was constructed from the famous books dataset, organizing ratings by users and books. Subsequently, cosine similarity and Pearson correlation models were generated from this pivot table to measure the similarity between books based on user ratings.
+
+The evaluation of the recommendation system was conducted through three cases, where popular books like "Message in a Bottle", "The Rescue", and "Harry Potter and the Chamber of Secrets (Book 2)" were analyzed. In each case, the system demonstrated strong performance, recommending similar books with a high degree of overlap, albeit with variations in the recommended order.
+
+Overall, the collaborative-based filtering approach, combined with cosine similarity and Pearson correlation, proves to be a reliable method for generating personalized book recommendations, contributing to an enriched user experience.
+
+Popularity-based filtering approach: Therefore the top 50 books are selected based on specific criteria, they have received a substantial number of user ratings (greater than 200), and they are sorted based on their average ratings. This method has yielded a robust recommendation system. The selected books have mean of 283 count of ratings given by users(minimum of 204 count of ratings and a maximum of 707 count of ratings), Average book rating is 7.9 (minimum of 4.39 ratings and a maximum of 9.12 ratings), reflecting a diverse and high-quality collection.
